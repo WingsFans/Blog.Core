@@ -8,9 +8,6 @@ using Blog.Core.Model;
 using Blog.Core.Repository.Base;
 using Blog.Core.Repository.UnitOfWorks;
 using Blog.Core.Services.BASE;
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Reflection;
 using Serilog;
 
@@ -23,52 +20,67 @@ namespace Blog.Core.Extensions
             var basePath = AppContext.BaseDirectory;
             //builder.RegisterType<AdvertisementServices>().As<IAdvertisementServices>();
 
-
             #region 带有接口层的服务注入
 
             var servicesDllFile = Path.Combine(basePath, "Blog.Core.Services.dll");
+
             var repositoryDllFile = Path.Combine(basePath, "Blog.Core.Repository.dll");
 
             if (!(File.Exists(servicesDllFile) && File.Exists(repositoryDllFile)))
             {
-                var msg = "Repository.dll和service.dll 丢失，因为项目解耦了，所以需要先F6编译，再F5运行，请检查 bin 文件夹，并拷贝。";
+                var msg =
+                    "Repository.dll和service.dll 丢失，因为项目解耦了，所以需要先F6编译，再F5运行，请检查 bin 文件夹，并拷贝。";
+
                 Log.Error(msg);
+
                 throw new Exception(msg);
             }
 
-
-            // AOP 开关，如果想要打开指定的功能，只需要在 appsettigns.json 对应对应 true 就行。
+            // AOP 开关，如果想要打开指定的功能，需要在 appsettigns.json 对应 true 。
             var cacheType = new List<Type>();
+
+            //缓存拦截器
             if (AppSettings.app(new string[] { "AppSettings", "CachingAOP", "Enabled" }).ObjToBool())
             {
                 builder.RegisterType<BlogCacheAOP>();
+
                 cacheType.Add(typeof(BlogCacheAOP));
             }
 
+            //事务拦截器
             if (AppSettings.app(new string[] { "AppSettings", "TranAOP", "Enabled" }).ObjToBool())
             {
                 builder.RegisterType<BlogTranAOP>();
+
                 cacheType.Add(typeof(BlogTranAOP));
             }
 
+            //日志拦截器
             if (AppSettings.app(new string[] { "AppSettings", "LogAOP", "Enabled" }).ObjToBool())
             {
                 builder.RegisterType<BlogLogAOP>();
+
                 cacheType.Add(typeof(BlogLogAOP));
             }
 
+            //审计拦截器 ？？作用未知
             if (AppSettings.app(new string[] { "AppSettings", "UserAuditAOP", "Enabled" }).ObjToBool())
             {
                 builder.RegisterType<BlogUserAuditAOP>();
+
                 cacheType.Add(typeof(BlogUserAuditAOP));
             }
 
-            builder.RegisterGeneric(typeof(BaseRepository<>)).As(typeof(IBaseRepository<>)).InstancePerDependency(); //注册仓储
-            builder.RegisterGeneric(typeof(BaseServices<>)).As(typeof(IBaseServices<>)).InstancePerDependency();     //注册服务
+            //注册仓储
+            builder.RegisterGeneric(typeof(BaseRepository<>)).As(typeof(IBaseRepository<>)).InstancePerDependency();
+
+            //注册服务
+            builder.RegisterGeneric(typeof(BaseServices<>)).As(typeof(IBaseServices<>)).InstancePerDependency();
 
             // 获取 Service.dll 程序集服务，并注册
-            var assemblysServices = Assembly.LoadFrom(servicesDllFile);
-            builder.RegisterAssemblyTypes(assemblysServices)
+            var assemblyServices = Assembly.LoadFrom(servicesDllFile);
+
+            builder.RegisterAssemblyTypes(assemblyServices)
                 .AsImplementedInterfaces()
                 .InstancePerDependency()
                 .PropertiesAutowired()
@@ -76,13 +88,15 @@ namespace Blog.Core.Extensions
                 .InterceptedBy(cacheType.ToArray()); //允许将拦截器服务的列表分配给注册。
 
             // 获取 Repository.dll 程序集服务，并注册
-            var assemblysRepository = Assembly.LoadFrom(repositoryDllFile);
-            builder.RegisterAssemblyTypes(assemblysRepository)
+            var assemblyRepository = Assembly.LoadFrom(repositoryDllFile);
+
+            builder.RegisterAssemblyTypes(assemblyRepository)
                 .AsImplementedInterfaces()
                 .PropertiesAutowired()
                 .InstancePerDependency();
 
-            builder.RegisterType<UnitOfWorkManage>().As<IUnitOfWorkManage>()
+            builder.RegisterType<UnitOfWorkManage>()
+                .As<IUnitOfWorkManage>()
                 .AsImplementedInterfaces()
                 .InstancePerLifetimeScope()
                 .PropertiesAutowired();
